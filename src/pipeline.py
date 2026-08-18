@@ -29,7 +29,7 @@ def build_pipeline():
         parents, children = chunk_hierarchical(doc["text"], metadata=doc["metadata"])
         for child in children:
             all_chunks.append({"text": child.text, "metadata": {**child.metadata, "parent_id": child.parent_id}})
-    print(f"  ✓ {len(all_chunks)} chunks from {len(docs)} documents ({time.time()-t0:.1f}s)", flush=True)
+    print(f"  [OK] {len(all_chunks)} chunks from {len(docs)} documents ({time.time()-t0:.1f}s)", flush=True)
 
     # Step 2: Enrichment (M5)
     t0 = time.time()
@@ -37,22 +37,22 @@ def build_pipeline():
     enriched = enrich_chunks(all_chunks)
     if enriched:
         all_chunks = [{"text": e.enriched_text, "metadata": e.auto_metadata} for e in enriched]
-        print(f"  ✓ Enriched {len(enriched)} chunks ({time.time()-t0:.1f}s)", flush=True)
+        print(f"  [OK] Enriched {len(enriched)} chunks ({time.time()-t0:.1f}s)", flush=True)
     else:
-        print("  ⚠️  M5 not implemented — using raw chunks", flush=True)
+        print("  [WARN] M5 not implemented - using raw chunks", flush=True)
 
     # Step 3: Index (M2)
     t0 = time.time()
     print(f"\n[3/4] Indexing {len(all_chunks)} chunks (BM25 + Dense)...", flush=True)
     search = HybridSearch()
     search.index(all_chunks)
-    print(f"  ✓ Indexed ({time.time()-t0:.1f}s)", flush=True)
+    print(f"  [OK] Indexed ({time.time()-t0:.1f}s)", flush=True)
 
     # Step 4: Reranker (M3)
     t0 = time.time()
     print("\n[4/4] Loading reranker...", flush=True)
     reranker = CrossEncoderReranker()
-    print(f"  ✓ Reranker ready ({time.time()-t0:.1f}s)", flush=True)
+    print(f"  [OK] Reranker ready ({time.time()-t0:.1f}s)", flush=True)
 
     return search, reranker
 
@@ -76,7 +76,7 @@ def run_query(query: str, search: HybridSearch, reranker: CrossEncoderReranker) 
             ])
             answer = resp.choices[0].message.content
         except Exception as e:
-            print(f"  ⚠️  LLM generation failed: {e}", flush=True)
+            print(f"  [WARN] LLM generation failed: {e}", flush=True)
             answer = contexts[0]
     else:
         answer = contexts[0] if contexts else "Không tìm thấy thông tin."
@@ -95,19 +95,19 @@ def evaluate_pipeline(search: HybridSearch, reranker: CrossEncoderReranker):
         answers.append(answer)
         all_contexts.append(contexts)
         ground_truths.append(item["ground_truth"])
-        print(f"  [{i+1}/{len(test_set)}] {item['question'][:50]}...", flush=True)
+        print(f"  [{i+1}/{len(test_set)}] Query {i+1}", flush=True)
 
     t0 = time.time()
     print(f"\n[Eval] Running RAGAS (4 metrics × {len(test_set)} questions)...", flush=True)
     results = evaluate_ragas(questions, answers, all_contexts, ground_truths)
-    print(f"  ✓ RAGAS done ({time.time()-t0:.1f}s)", flush=True)
+    print(f"  [OK] RAGAS done ({time.time()-t0:.1f}s)", flush=True)
 
     print("\n" + "=" * 60)
     print("PRODUCTION RAG SCORES")
     print("=" * 60)
     for m in ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]:
         s = results.get(m, 0)
-        print(f"  {'✓' if s >= 0.75 else '✗'} {m}: {s:.4f}")
+        print(f"  {'[OK]' if s >= 0.75 else '[LOW]'} {m}: {s:.4f}")
 
     failures = failure_analysis(results.get("per_question", []))
     save_report(results, failures)
